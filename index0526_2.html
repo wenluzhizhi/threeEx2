@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>打开手机相机</title>
+    <style>
+        #booth {
+            position: absolute;
+            z-index: 1;
+            display: none;
+        }
+
+        #threeContainer {
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+<script src="build/three.js"></script>
+<script src="js/controls/OrbitControls.js"></script>
+<script src="js/libs/dat.gui.min.js"></script>
+<div id="booth">
+    <video id="video" width="400" height="300">
+
+    </video>
+
+    <button id="tack">snap</button>
+
+</div>
+<div id="threeContainer">
+
+</div>
+<script>
+
+    var video = document.getElementById("video");
+    var btn = document.getElementById("tack");
+
+    navigator.getMedia = navigator.getUserMedia ||
+        navigator.webkitGetUserMedia ||
+        navigator.mozGetUserMedia ||
+        navigator.msgetUserMedia;
+
+    navigator.getMedia(
+        {video: true, audio: false},
+        function (stream) {
+            console.log(stream);
+            video.src = window.URL.createObjectURL(stream);
+
+        }, function (error) {
+
+        });
+
+    btn.addEventListener("click", function () {
+        console.log("3333333");
+        video.play();
+    });
+</script>
+
+
+<script id="vs" type="x-shader/x-vertex">
+
+       varying vec2 uv2;
+       void main(){
+           uv2=uv;
+           gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1);
+       }
+
+
+
+
+</script>
+
+<script id="fs" type="x-shader/x-fragment">
+        varying vec2 uv2;
+        uniform sampler2D tex;
+        uniform float time;
+        uniform float range;
+        float gray(vec4 c){
+           return 0.2125*c.x+0.7154*c.y+0.0721*c.z;
+        }
+
+        void main()
+        {
+          vec4 v=texture2D(tex,uv2);
+
+
+
+          float offsetUV=0.001;
+
+          vec2 uvs_h[9];
+
+          uvs_h[0]=uv2+vec2(-1,1)*offsetUV;
+          uvs_h[1]=uv2+vec2(0,1)*offsetUV;
+          uvs_h[2]=uv2+vec2(1,1)*offsetUV;
+
+          uvs_h[3]=uv2+vec2(-1,0)*offsetUV;
+          uvs_h[4]=uv2+vec2(0,0)*offsetUV;
+          uvs_h[5]=uv2+vec2(1,0)*offsetUV;
+
+          uvs_h[6]=uv2+vec2(-1,-1)*offsetUV;
+          uvs_h[7]=uv2+vec2(0,-1)*offsetUV;
+          uvs_h[8]=uv2+vec2(1,-1)*offsetUV;
+
+         float gx[9];
+gx[0]=-1.0;gx[1]=0.;gx[2]=1.0;
+gx[3]=-2.;gx[4]=0.;gx[5]=2.0;
+gx[6]=-1.;gx[7]=0.0;gx[8]=1.0;
+
+float gy[9];
+gy[0]=1.;gy[1]=2.;gy[2]=1.;
+gy[3]=0.;gy[4]=0.;gy[5]=0.;
+gy[6]=-1.;gy[7]=-2.;gy[8]=-1.;
+
+float s=gray(v);
+
+float sx=0.0,sy=0.0;
+for(int i=0;i<9;i++){
+s=gray(texture2D(tex,uvs_h[i]));
+sx+=s*gx[i];
+sy+=s*gy[i];
+}
+
+float edge=1.0-abs(sx)-abs(sy);
+
+if(abs(time-uv2.y)<0.1){
+
+    if(edge<range){
+       v=vec4(1,0,0,1);
+    }
+
+}
+
+
+
+
+
+
+           gl_FragColor=v;
+        }
+
+
+
+
+</script>
+<script>
+
+    var threeContainer, scene, camera, renderer;
+    var _time = 0.0;
+    var p2;
+    var planeM;
+    var uniforms;
+    var gui;
+
+    function init() {
+
+        threeContainer = document.getElementById("threeContainer");
+
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        threeContainer.appendChild(renderer.domElement);
+
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 10000);
+        camera.position.set(0, 0, -1000);
+
+        controls = new THREE.OrbitControls(camera);
+        controls.update();
+
+        scene = new THREE.Scene();
+
+        var gh = new THREE.GridHelper(2000, 20);
+        scene.add(gh);
+
+        var video = document.getElementById("video");
+        var texture = new THREE.VideoTexture(video);
+        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.minFilter = THREE.LinearFilter;
+
+        var planeGe = new THREE.PlaneGeometry(600, 600);
+        var planeMa = new THREE.MeshBasicMaterial({map: texture, side: THREE.DoubleSide});
+
+        uniforms = {
+            tex: {value: texture},
+            time: {value: _time},
+            range:{value:0.8},
+        };
+
+        var p2 = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: document.getElementById("vs").innerHTML,
+            fragmentShader: document.getElementById("fs").innerHTML,
+            side: THREE.doubleSided,
+            //transparent: true,
+        });
+        planeM = new THREE.Mesh(planeGe, p2);
+        planeM.position.y = 300;
+
+        scene.add(planeM);
+
+
+
+        var envMap = new THREE.CubeTextureLoader().load( [
+            'textures/cube/skybox/px.jpg', // right
+            'textures/cube/skybox/nx.jpg', // left
+            'textures/cube/skybox/py.jpg', // top
+            'textures/cube/skybox/ny.jpg', // bottom
+            'textures/cube/skybox/pz.jpg', // back
+            'textures/cube/skybox/nz.jpg'  // front
+        ] );
+        envMap.format = THREE.RGBFormat;
+        scene.background = envMap;
+
+        var axesHelper=new THREE.AxesHelper(1000);
+        scene.add(axesHelper);
+
+        setGUI();
+
+    }
+
+    var clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate)
+        planeM.lookAt(camera.position);
+        renderer.render(scene, camera);
+        _time += clock.getDelta();
+        if (_time > 1.0) {
+            _time -= 1.0;
+        }
+        uniforms.time.value = _time;
+    }
+
+    
+    function setGUI() {
+        gui={
+            openCamera:false,
+            rimRange:0.8,
+        }
+
+
+        var dataGui=new dat.GUI();
+        dataGui.add(gui,"openCamera").onChange(function (val) {
+            var video = document.getElementById("video");
+            if(val) {
+                video.play();
+            }
+            else{
+                video.pause();
+            }
+        });
+
+        dataGui.add(gui,"rimRange",0.0,1.0).onChange(function (val) {
+            uniforms.range.value=val;
+        });
+    }
+    init();
+    animate();
+
+</script>
+</body>
+</html>
